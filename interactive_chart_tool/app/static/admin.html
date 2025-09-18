@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Admin Panel</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #fff; color: #111; padding: 1em; }
+    input, button { padding: 0.5em; margin: 0.2em; }
+    #out { white-space: pre-wrap; background: #f3f3f3; padding: 1em; margin-top: 1em; border-radius:8px; }
+    .grid{display:grid;grid-template-columns:repeat(2, minmax(260px, 1fr));gap:10px; align-items:start}
+    .card{background:#fafafa;border:1px solid #e6e6e6;border-radius:10px;padding:10px}
+    .muted{color:#666;font-size:12px}
+    @media (max-width:900px){ .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <h1>Admin Panel</h1>
+
+  <label>Admin Token: <input id="token" type="password" /></label>
+
+  <h2>Aktionen</h2>
+  <button onclick="call('/admin/reset')">Reset</button>
+  <button onclick="call('/admin/pause')">Pause</button>
+  <button onclick="call('/admin/resume')">Resume</button>
+
+  <h2>Parameter adjustment</h2>
+  <form id="paramForm" class="grid">
+    <div class="card">
+      <label>Alpha (0..1)<br><input name="alpha" type="number" step="0.01" value="0.12"></label>
+      <div class="muted">Maximum price effect per step (±alpha). Higher = stronger.</div>
+    </div>
+
+    <div class="card">
+      <label>Impact K<br><input name="impact_k" type="number" step="0.1" value="4"></label>
+      <div class="muted">Scaling for net order flow. Smaller = more sensitive, larger = more sluggish.</div>
+    </div>
+
+    <div class="card">
+      <label>Power (≥1.0)<br><input name="power" type="number" step="0.05" value="1.35"></label>
+      <div class="muted">Super-linear amplifier for large waves. 1.0 = linear, 1.5 = very aggressive.</div>
+    </div>
+
+    <div class="card">
+      <label>Lambda 0..1<br><input name="lambda_" type="number" step="0.01" value="0.60"></label>
+      <div class="muted">Easing to target price. Higher = faster pace, lower = smoother.</div>
+    </div>
+
+    <div class="card">
+      <label>Max Move (bp)<br><input name="max_move_bp" type="number" step="10" value="400"></label>
+      <div class="muted">Hard cap per update in basis points (400 = 4.00%).</div>
+    </div>
+
+    <div class="card">
+      <label>Broadcast Hz<br><input name="broadcast_hz" type="number" step="0.1" value="4"></label>
+      <div class="muted">Update frequency on clients (e.g., 4 Hz = every 250 ms). Without trades, the graph remains static.</div>
+    </div>
+
+    <div class="card">
+      <label>Trade Size<br><input name="trade_size" type="number" value="1"></label>
+      <div class="muted">Number of items per click. Influences the price effect (higher = stronger).</div>
+    </div>
+
+    <div class="card">
+      <label>Start Price<br><input name="start_price" type="number" step="0.01" value="100"></label>
+      <div class="muted">Starting price after reset.</div>
+    </div>
+
+    <div class="card">
+      <label>Start Cash<br><input name="start_cash" type="number" value="1000"></label>
+      <div class="muted">Starting liquidity per player at reset.</div>
+    </div>
+
+    <div><button type="submit">Update</button></div>
+  </form>
+
+  <h2>Description</h2>
+  <div class="card">
+    <ul>
+      <li><b>Pricing</b>: For each trade, the net order flow since the last update is calculated. This results in an impact:
+        <code>impact = ± Alpha · tanh( |net/ImpactK|^Power )</code>. Then ease with <code>Lambda</code> and capping with <code>Max Move (bp)</code>.</li>
+      <li><b>Static X-axis</b>: The X-axis shows the <i>Trade-Index</i>. Without trades, there are no horizontal lines.</li>
+      <li><b>Broadcast</b>: All clients receive a snapshot every 250 ms. Without trades, only the UI changes, not the graph.</li>
+      <li><b>Scaling</b>: Y-axis is dynamically buffered, small areas are automatically stretched.</li>
+    </ul>
+  </div>
+
+  <pre id="out"></pre>
+
+  <script>
+    async function call(endpoint, body) {
+      const token = document.getElementById("token").value;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'x-token': token},
+        body: body ? JSON.stringify(body) : null
+      });
+      document.getElementById("out").textContent = await res.text();
+    }
+
+    document.getElementById("paramForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      Object.keys(data).forEach(k => data[k] = Number(data[k]));
+      await call('/admin/update', data);
+    });
+  </script>
+</body>
+</html>

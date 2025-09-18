@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>herd instinct Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <style>
+    :root{
+      --bg:#0f1115; --panel:#151822; --muted:#9aa4b2; --text:#e8eef6; --accent:#8fd14f;
+      --grid:#2a2f3a; --line:#9BE368; --disabled:.45;
+    }
+    *{box-sizing:border-box}
+    body{font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+         background:var(--bg); color:var(--text); margin:0; padding:16px}
+    #wrap{max-width:1200px; margin:auto}
+    .card{background:var(--panel); border-radius:14px; padding:16px; box-shadow:0 1px 0 rgba(0,0,0,.4) inset, 0 4px 12px rgba(0,0,0,.25)}
+    .grid{display:grid; gap:16px}
+    .grid.cols-2{grid-template-columns: 1fr 1fr}
+    .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    input,button{padding:10px 12px; border-radius:10px; border:1px solid #2b3140; background:#0f1320; color:var(--text)}
+    button{background:#1b2133; cursor:pointer; transition:opacity .15s ease, filter .15s ease}
+    button:hover{filter:brightness(1.08)}
+    button:disabled{opacity:var(--disabled); cursor:not-allowed; filter:grayscale(40%)}
+    h1,h2,h3{margin:.2em 0 .6em}
+    small{color:var(--muted)}
+    .pill{padding:4px 8px; border-radius:8px; background:#0d111b; border:1px solid #2a3246}
+    .badge{font-size:12px; color:#c8d1de; background:#0d111b; padding:4px 8px; border:1px solid #283043; border-radius:999px}
+    .stat-grid{display:grid; grid-template-columns: repeat(4, 1fr); gap:10px}
+    .stat{background:#101524; border:1px solid #1f2637; border-radius:10px; padding:10px}
+    .stat .val{font-weight:700; font-size:18px}
+    .stat .user{font-size:12px; color:var(--muted)}
+    #chartWrap{position:relative}
+    canvas{display:block; width:100%; height:360px; border-radius:12px; background:#111520}
+    .tooltip{
+      position:absolute; pointer-events:none; transform:translate(-50%, -120%);
+      background:#0b1020; border:1px solid #2a3246; color:#e8eef6; padding:6px 8px; border-radius:8px;
+      font-size:12px; white-space:nowrap; box-shadow:0 6px 24px rgba(0,0,0,.35)
+    }
+    .legend{display:flex; gap:10px; align-items:center; color:var(--muted); font-size:12px; margin-top:6px}
+    .dot{width:10px; height:10px; border-radius:999px; background:var(--line)}
+    @media (max-width: 900px){ .grid.cols-2{grid-template-columns: 1fr} .stat-grid{grid-template-columns: repeat(2,1fr)} }
+  </style>
+</head>
+<body>
+<div id="wrap" class="grid cols-2">
+  <!-- Login -->
+  <div id="login" class="card">
+    <h1>herd instinct</h1>
+    <p><small>Please enter your username (max. 12 characters) and global password.</small></p>
+    <div class="row">
+      <input id="username" placeholder="Benutzername" maxlength="12" style="min-width:200px">
+      <input id="password" type="password" placeholder="Passwort" style="min-width:200px">
+      <button id="joinBtn" onclick="join()">Beitreten</button>
+    </div>
+    <pre id="loginMsg" style="margin-top:8px;color:#ffd39a"></pre>
+  </div>
+
+  <!-- Player HUD -->
+  <div id="hud" class="card" style="display:none">
+    <h2>Welcome, <span id="uname"></span></h2>
+    <div class="row">
+      <div class="pill">Price: <b id="price">–</b></div>
+      <div class="pill">Cash: <b id="cash">–</b></div>
+      <div class="pill">Shares: <b id="shares">–</b></div>
+      <div class="pill">Total: <b id="total">–</b></div>
+      <span class="badge" id="feedStatus">WS: connecting…</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="buyBtn"  onclick="buy()">Buy</button>
+      <button id="sellBtn" onclick="sell()">Sell</button>
+    </div>
+  </div>
+
+  <!-- Chart Panel -->
+  <div class="card" id="chartPanel" style="grid-column: 1 / -1;">
+    <div class="row" style="justify-content:space-between">
+      <h3 style="margin:0">price history</h3>
+      <div class="legend"><span class="dot"></span> Last price: <span id="lastPrice">–</span></div>
+    </div>
+    <div id="chartWrap">
+      <canvas id="chart"></canvas>
+      <div id="tip" class="tooltip" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Stat Panel -->
+  <div class="card" id="statsPanel" style="grid-column: 1 / -1;">
+    <h3>Statistic</h3>
+    <div class="stat-grid" id="statsGrid">
+      <div class="stat"><div>active clients</div><div class="val" id="s_clients">–</div></div>
+      <div class="stat"><div>Buys (totals)</div><div class="val" id="s_buys">–</div></div>
+      <div class="stat"><div>Sells (totals)</div><div class="val" id="s_sells">–</div></div>
+      <div class="stat"><div>Active (1s)</div><div class="val"><span id="s_ab">0</span> / <span id="s_as">0</span></div><div class="user"><small>Buys / Sells</small></div></div>
+
+      <div class="stat"><div>Max Cash</div><div class="val" id="s_mc">–</div><div class="user" id="s_mc_u"> </div></div>
+      <div class="stat"><div>Min Cash</div><div class="val" id="s_mcn">–</div><div class="user" id="s_mcn_u"> </div></div>
+      <div class="stat"><div>Max Total</div><div class="val" id="s_mt">–</div><div class="user" id="s_mt_u"> </div></div>
+      <div class="stat"><div>Min Total</div><div class="val" id="s_mtn">–</div><div class="user" id="s_mtn_u"> </div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let playerId=null, username=null, socket=null, lastHistory=[];
+const dpr = Math.max(1, window.devicePixelRatio || 1);
+const fmt = n => Number(n).toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmt0 = n => Number(n).toLocaleString('de-DE', {maximumFractionDigits:0});
+
+const priceEl  = document.getElementById("price");
+const cashEl   = document.getElementById("cash");
+const sharesEl = document.getElementById("shares");
+const totalEl  = document.getElementById("total");
+const lastPrice = document.getElementById("lastPrice");
+const feedStatus = document.getElementById("feedStatus");
+const buyBtn  = document.getElementById("buyBtn");
+const sellBtn = document.getElementById("sellBtn");
+
+const statsEls = {
+  clients: document.getElementById("s_clients"),
+  buys:    document.getElementById("s_buys"),
+  sells:   document.getElementById("s_sells"),
+  ab:      document.getElementById("s_ab"),
+  as:      document.getElementById("s_as"),
+  mc:      document.getElementById("s_mc"),
+  mcu:     document.getElementById("s_mc_u"),
+  mcn:     document.getElementById("s_mcn"),
+  mcnu:    document.getElementById("s_mcn_u"),
+  mt:      document.getElementById("s_mt"),
+  mtu:     document.getElementById("s_mt_u"),
+  mtn:     document.getElementById("s_mtn"),
+  mtnu:    document.getElementById("s_mtn_u"),
+};
+
+const canvas = document.getElementById("chart");
+const tip = document.getElementById("tip");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas(){
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.floor(rect.width * dpr);
+  canvas.height = Math.floor(rect.height * dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize', ()=>{ resizeCanvas(); drawChart(lastHistory); });
+resizeCanvas();
+
+// ---- Dynamic Y-scaling ----
+function computeYScale(prices){
+  let minP = Math.min(...prices);
+  let maxP = Math.max(...prices);
+  const last = prices[prices.length-1];
+  const mid  = (minP + maxP) / 2;
+  const span = Math.max(0.0001, maxP - minP);
+  const padAbs = Math.max(0.05, mid * 0.02); // 2% buffer
+  minP -= padAbs; maxP += padAbs;
+  if (span / Math.max(0.0001, mid) < 0.004) { // <0.4% -> to ±1.2% stretch
+    minP = last * 0.988; maxP = last * 1.012;
+  }
+  return [minP, maxP];
+}
+
+function drawChart(history){
+  const rect = canvas.getBoundingClientRect();
+  ctx.clearRect(0,0,rect.width,rect.height);
+  const padL=50, padR=20, padT=16, padB=28;
+  const W = rect.width, H = rect.height;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+
+  // grid
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  const yTicks = 5;
+  for(let i=0;i<=yTicks;i++){
+    const y = padT + (i/yTicks)*plotH; ctx.moveTo(padL, y); ctx.lineTo(W-padR, y);
+  }
+  const xTicks = 6;
+  for(let i=0;i<=xTicks;i++){
+    const x = padL + (i/xTicks)*plotW; ctx.moveTo(x, padT); ctx.lineTo(x, H-padB);
+  }
+  ctx.stroke();
+
+  if(!history || history.length<2){ return; }
+
+  const prices = history.map(p=>p.price);
+  const N = prices.length;
+
+  // ► X-Axis = Index (Trades), no time
+  const xOfIndex = i => padL + (i/(N-1)) * plotW;
+
+  // ► Y dynamic
+  let [minP, maxP] = computeYScale(prices);
+  const yOf = p => padT + (1 - (p-minP)/Math.max(0.0001,(maxP-minP))) * plotH;
+
+  // area
+  const grad = ctx.createLinearGradient(0,padT,0,H-padB);
+  grad.addColorStop(0,'rgba(155,227,104,0.25)');
+  grad.addColorStop(1,'rgba(155,227,104,0)');
+  ctx.beginPath();
+  ctx.moveTo(xOfIndex(0), yOf(prices[0]));
+  for(let i=1;i<N;i++){ ctx.lineTo(xOfIndex(i), yOf(prices[i])); }
+  ctx.lineTo(xOfIndex(N-1), H-padB);
+  ctx.lineTo(xOfIndex(0), H-padB);
+  ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // line
+  ctx.beginPath();
+  ctx.moveTo(xOfIndex(0), yOf(prices[0]));
+  for(let i=1;i<N;i++){ ctx.lineTo(xOfIndex(i), yOf(prices[i])); }
+  ctx.lineWidth=2; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line'); ctx.stroke();
+
+  // y labels
+  ctx.fillStyle = "#b7c2cf"; ctx.font = "12px ui-sans-serif, system-ui";
+  for(let i=0;i<=yTicks;i++){
+    const p = minP + (i/yTicks)*(maxP-minP);
+    const y = padT + (1 - (p-minP)/Math.max(0.0001,(maxP-minP))) * plotH;
+    ctx.fillText(p.toFixed(2), 8, y+4);
+  }
+  // x labels (Trade-Index)
+  for(let i=0;i<=xTicks;i++){
+    const idx = Math.round((i/xTicks)*(N-1));
+    const x = xOfIndex(idx) - 12;
+    ctx.fillText(String(idx), x, H-8);
+  }
+
+  const lp = prices[N-1], lx = xOfIndex(N-1), ly = yOf(lp);
+  document.getElementById("lastPrice").textContent = lp.toFixed(2);
+  ctx.fillStyle = "#0b1020"; ctx.strokeStyle = "#2a3246"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.rect(W-64, ly-10, 56, 20); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#e8eef6"; ctx.fillText(lp.toFixed(2), W-58, ly+5);
+
+  // Crosshair (Index based)
+  const tip = document.getElementById("tip");
+  canvas.onmousemove = (ev)=>{
+    const x = ev.offsetX;
+    const frac = Math.min(1, Math.max(0, (x - padL) / (W-padL-20)));
+    let idx = Math.round(frac*(N-1));
+    const cx = xOfIndex(idx), cy = yOf(prices[idx]);
+    drawChart(history);
+    ctx.strokeStyle="#3a4154"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, H-28); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(50, cy); ctx.lineTo(W-20, cy); ctx.stroke();
+    ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--line');
+    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
+
+    tip.style.display="block";
+    tip.textContent = `Trade #${idx} • ${prices[idx].toFixed(2)}`;
+    tip.style.left = `${cx}px`; tip.style.top = `${cy}px`;
+  };
+  canvas.onmouseleave = ()=>{ tip.style.display="none"; drawChart(history); };
+}
+
+async function join(){
+  const uname = document.getElementById("username").value.trim();
+  const pwd   = document.getElementById("password").value;
+  if(!uname || !pwd){ document.getElementById("loginMsg").textContent="Bitte Username und Passwort eingeben."; return; }
+
+  try{
+    const res = await fetch("/api/v1/join", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: uname, password: pwd })
+    });
+    if(!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    playerId = data.player_id; username = data.username;
+
+    document.getElementById("uname").textContent = username;
+    document.getElementById("login").style.display="none";
+    document.getElementById("hud").style.display="block";
+
+    startSocket();
+    refreshState();
+  }catch(e){
+    document.getElementById("loginMsg").textContent = "Fehler beim Beitritt.";
+  }
+}
+
+function startSocket(){
+  const wsProto = location.protocol === "https:" ? "wss" : "ws";
+  socket = new WebSocket(`${wsProto}://${location.host}/ws`);
+  feedStatus.textContent="WS: connecting…";
+
+  socket.onopen = ()=> feedStatus.textContent="WS: connected";
+  socket.onclose = ()=>{ feedStatus.textContent="WS: reconnect…"; setTimeout(startSocket, 1500); };
+  socket.onerror = ()=> feedStatus.textContent="WS: error";
+
+  socket.onmessage = (event)=>{
+    const msg = JSON.parse(event.data);
+    if(msg.type==="snapshot"){
+      lastHistory = msg.history || [];
+      drawChart(lastHistory);
+      updateStats(msg);
+      document.getElementById("price").textContent = Number(msg.price).toFixed(2);
+      window._paused = msg.paused;
+      applyButtonState();
+    }
+  };
+}
+
+function updateStats(snap){
+  const s = snap.stats || {};
+  statsEls.clients.textContent = fmt0(s.clients ?? 0);
+  statsEls.buys.textContent    = fmt0((s.totals||{}).buys ?? 0);
+  statsEls.sells.textContent   = fmt0((s.totals||{}).sells ?? 0);
+  statsEls.ab.textContent      = fmt0((s.active||{}).buys ?? 0);
+  statsEls.as.textContent      = fmt0((s.active||{}).sells ?? 0);
+
+  if(s.max_cash){ statsEls.mc.textContent = fmt(s.max_cash.value); statsEls.mcu.textContent = "von " + s.max_cash.username; }
+  if(s.min_cash){ statsEls.mcn.textContent = fmt(s.min_cash.value); statsEls.mcnu.textContent = "von " + s.min_cash.username; }
+  if(s.max_total){ statsEls.mt.textContent = fmt(s.max_total.value); statsEls.mtu.textContent = "von " + s.max_total.username; }
+  if(s.min_total){ statsEls.mtn.textContent = fmt(s.min_total.value); statsEls.mtnu.textContent = "von " + s.min_total.username; }
+}
+
+function applyButtonState(canBuy=null, canSell=null, paused=null){
+  if (paused === null) paused = window._paused ?? false;
+  if (canBuy === null)  canBuy  = window._can_buy  ?? false;
+  if (canSell === null) canSell = window._can_sell ?? false;
+
+  buyBtn.disabled  = paused || !canBuy;
+  sellBtn.disabled = paused || !canSell;
+}
+
+async function refreshState(){
+  if(!playerId) return;
+  const res = await fetch(`/api/v1/state?player_id=${playerId}`);
+  if(!res.ok) return;
+  const d = await res.json();
+  document.getElementById("price").textContent  = fmt(d.price);
+  document.getElementById("cash").textContent   = fmt(d.portfolio.cash);
+  document.getElementById("shares").textContent = d.portfolio.shares;
+  document.getElementById("total").textContent  = fmt(d.total);
+  window._can_buy = d.can_buy; window._can_sell = d.can_sell; window._paused = d.paused;
+  applyButtonState(d.can_buy, d.can_sell, d.paused);
+  return d;
+}
+
+async function buy(){
+  if(!playerId || buyBtn.disabled) return;
+  await fetch("/api/v1/action", {
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ direction:"BUY", player_id: playerId })
+  });
+  await refreshState();
+}
+async function sell(){
+  if(!playerId || sellBtn.disabled) return;
+  await fetch("/api/v1/action", {
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ direction:"SELL", player_id: playerId })
+  });
+  await refreshState();
+}
+</script>
+</body>
+</html>
