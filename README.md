@@ -1,12 +1,12 @@
 # interactive_chart_tool
-Interactive Chart Tool – Herd Behavior Simulation A real-time interactive web tool built with Python (FastAPI, WebSockets) and Chart.js, designed for live presentations. Participants can join via QR code, buy/sell “shares,” and collectively influence a live price chart, visualizing herd behavior in markets.
+Interactive Chart Tool - Herd Behavior Simulation A real-time interactive web tool built with Python (FastAPI, WebSockets) and Chart.js, designed for live presentations. Participants can join via QR code, buy/sell “shares,” and collectively influence a live price chart, visualizing herd behavior in markets.
 
 # Interactive Chart Tool
 
 A real-time interactive tool to simulate **herd behavior** during presentations.  
 Participants join via QR code on their phones, buy or sell shares, and immediately see the price impact on a live chart shared across all clients.
 
-The system is lightweight (~30 participants), built with **FastAPI (Python)**, **WebSockets**, and **Chart.js**, and deployable with **Docker Compose**.
+Built with **FastAPI (Python)**, **WebSockets**, and **Chart.js**, and deployable with **Docker Compose**.
 
 ---
 
